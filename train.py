@@ -12,6 +12,8 @@ import os
 import torch.multiprocessing
 from tqdm import tqdm
 
+torch.backends.cudnn.benchmark = True
+
 # from models.matching import Matching
 from models.utils import (compute_pose_error, compute_epipolar_error,
                           estimate_pose, make_matching_plot,
@@ -119,7 +121,7 @@ parser.add_argument(
     '--batch_size', type=int, default=1,
     help='batch_size')
 parser.add_argument(
-    '--train_path', type=str, default='/dev/shm/MSCOCO2014_yingxin/', # MSCOCO2014_yingxin
+    '--train_path', type=str, default='/home/liuxiao/Develop/Data/COCO2017/images/train2017/', # MSCOCO2014_yingxin
     help='Path to the directory of training imgs.')
 # parser.add_argument(
 #     '--nfeatures', type=int, default=1024,

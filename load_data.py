@@ -18,6 +18,8 @@ class SparseDataset(Dataset):
 
         self.nfeatures = nfeatures
         self.sift = cv2.xfeatures2d.SIFT_create(nfeatures=self.nfeatures)
+        # self.sift = cv.xfeatures2d.SIFT_create()
+        # self.sift = cv2.SIFT_create(nfeatures=self.nfeatures)
 
         # self.matcher = cv2.BFMatcher_create(cv2.NORM_L1, crossCheck=True)
         self.matcher = cv2.BFMatcher_create(cv2.NORM_L1, crossCheck=False)
