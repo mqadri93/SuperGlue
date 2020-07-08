@@ -121,7 +121,7 @@ parser.add_argument(
     '--batch_size', type=int, default=1,
     help='batch_size')
 parser.add_argument(
-    '--train_path', type=str, default='/home/liuxiao/Develop/Data/COCO2017/images/train2017/', # MSCOCO2014_yingxin
+    '--train_path', type=str, default='assets/freiburg_sequence/', # MSCOCO2014_yingxin
     help='Path to the directory of training imgs.')
 # parser.add_argument(
 #     '--nfeatures', type=int, default=1024,
