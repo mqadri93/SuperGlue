@@ -176,7 +176,7 @@ if __name__ == '__main__':
     mean_loss = []
     for epoch in range(1, opt.epoch+1):
         epoch_loss = 0
-        superglue.double().train()
+        superglue.train()
         # train_loader = tqdm(train_loader)
         for i, pred in enumerate(train_loader):
             for k in pred:
@@ -201,8 +201,6 @@ if __name__ == '__main__':
             mean_loss.append(Loss) # every 10 pairs
             Loss.backward()
             optimizer.step()
-
-
 
             if (i+1) % 100 == 0:
                 print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}' 

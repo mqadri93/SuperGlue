@@ -230,8 +230,8 @@ class SuperGlue(nn.Module):
 
     def forward(self, data):
         """Run SuperGlue on a pair of keypoints and descriptors"""
-        desc0, desc1 = data['descriptors0'].double(), data['descriptors1'].double()
-        kpts0, kpts1 = data['keypoints0'].double(), data['keypoints1'].double()
+        desc0, desc1 = data['descriptors0'], data['descriptors1']
+        kpts0, kpts1 = data['keypoints0'], data['keypoints1']
 
         desc0 = desc0.transpose(0,1)
         desc1 = desc1.transpose(0,1)

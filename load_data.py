@@ -8,6 +8,9 @@ import datetime
 from scipy.spatial.distance import cdist
 from torch.utils.data import Dataset
 
+from skimage import io, transform
+from skimage.color import rgb2gray
+
 class SparseDataset(Dataset):
     """Sparse correspondences dataset."""
 
@@ -33,7 +36,10 @@ class SparseDataset(Dataset):
 		# data = np.load(self.files[idx], allow_pickle=True)
 
         file_name = self.files[idx]
-        image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE) 
+        image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE)
+        # 使用 IO 读取图像 rgb
+        # rgb_img = io.imread(file_name)
+        # image = rgb2gray(rgb_img)
         sift = self.sift
         width, height = image.shape[:2]
         # max_size = max(width, height)
@@ -51,16 +57,16 @@ class SparseDataset(Dataset):
         kp1 = kp1[:kp1_num]
         kp2 = kp2[:kp2_num]
 
-        kp1_np = np.array([(kp.pt[0], kp.pt[1]) for kp in kp1]) # maybe coordinates pt has 3 dimentions; kp1_np.shape=(50,)
-        kp2_np = np.array([(kp.pt[0], kp.pt[1]) for kp in kp2])
+        kp1_np = np.array([(kp.pt[0], kp.pt[1]) for kp in kp1]).astype(np.float32) # maybe coordinates pt has 3 dimentions; kp1_np.shape=(50,)
+        kp2_np = np.array([(kp.pt[0], kp.pt[1]) for kp in kp2]).astype(np.float32)
 
         if len(kp1) < 1 or len(kp2) < 1:
             # print("no kp: ",file_name)
             return{
-                'keypoints0': torch.zeros([0, 0, 2], dtype=torch.double),
-                'keypoints1': torch.zeros([0, 0, 2], dtype=torch.double),
-                'descriptors0': torch.zeros([0, 2], dtype=torch.double),
-                'descriptors1': torch.zeros([0, 2], dtype=torch.double),
+                'keypoints0': torch.zeros([0, 0, 2], dtype=torch.float32),
+                'keypoints1': torch.zeros([0, 0, 2], dtype=torch.float32),
+                'descriptors0': torch.zeros([0, 2], dtype=torch.float32),
+                'descriptors1': torch.zeros([0, 2], dtype=torch.float32),
                 'image0': image,
                 'image1': warped,
                 'file_name': file_name
@@ -137,8 +143,9 @@ class SparseDataset(Dataset):
         descs1 = np.transpose(descs1 / 256.)
         descs2 = np.transpose(descs2 / 256.)
 
-        image = torch.from_numpy(image/255.).double()[None].cuda()
-        warped = torch.from_numpy(warped/255.).double()[None].cuda()
+        # 归一化+通道数扩充一维
+        image = torch.from_numpy(image/255.).float().unsqueeze(0).cuda()
+        warped = torch.from_numpy(warped/255.).float().unsqueeze(0).cuda()
 
         return{
             'keypoints0': list(kp1_np),
