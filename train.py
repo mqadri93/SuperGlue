@@ -7,7 +7,7 @@ import matplotlib.cm as cm
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from load_data import SparseDataset
+from load_data import SparseDataset, HomographyDataset
 import os
 import torch.multiprocessing
 from tqdm import tqdm
@@ -161,7 +161,9 @@ if __name__ == '__main__':
         }
     }
 
-    train_set = SparseDataset(opt.train_path, opt.max_keypoints)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#    train_set = SparseDataset(opt.train_path, opt.max_keypoints)
+    train_set = HomographyDataset(opt.train_path, device=device, superpoint_config=config.get('superpoint', {}))
     train_loader = torch.utils.data.DataLoader(dataset=train_set, shuffle=False, batch_size=opt.batch_size, drop_last=True)
 
     # superpoint = SuperPoint(config.get('superpoint', {}))
