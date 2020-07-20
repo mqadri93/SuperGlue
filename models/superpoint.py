@@ -142,8 +142,7 @@ class SuperPoint(nn.Module):
 
         print('Loaded SuperPoint model')
 
-    def forward(self, data):
-        """ Compute keypoints, scores, descriptors for image """
+    def encode(self, data):
         # Shared Encoder
         x = self.relu(self.conv1a(data['image']))
         x = self.relu(self.conv1b(x))
@@ -156,7 +155,9 @@ class SuperPoint(nn.Module):
         x = self.pool(x)
         x = self.relu(self.conv4a(x))
         x = self.relu(self.conv4b(x))
+        return x
 
+    def compute_scores(self, x):
         # Compute the dense keypoint scores
         cPa = self.relu(self.convPa(x))
         scores = self.convPb(cPa)
@@ -165,6 +166,10 @@ class SuperPoint(nn.Module):
         scores = scores.permute(0, 2, 3, 1).reshape(b, h, w, 8, 8)
         scores = scores.permute(0, 1, 3, 2, 4).reshape(b, h*8, w*8)
         scores = simple_nms(scores, self.config['nms_radius'])
+        return scores, h, w
+
+    def extract_keypoints(self, x):
+        scores, h, w = self.compute_scores(x)
 
         # Extract keypoints
         keypoints = [
@@ -186,6 +191,9 @@ class SuperPoint(nn.Module):
         # Convert (h, w) to (x, y)
         keypoints = [torch.flip(k, [1]).float() for k in keypoints]
 
+        return keypoints, scores
+
+    def compute_descriptors(self, x, keypoints):
         # Compute the dense descriptors
         cDa = self.relu(self.convDa(x))
         descriptors = self.convDb(cDa)
@@ -194,9 +202,32 @@ class SuperPoint(nn.Module):
         # Extract descriptors
         descriptors = [sample_descriptors(k[None], d[None], 8)[0]
                        for k, d in zip(keypoints, descriptors)]
+        return descriptors
+
+    def forward(self, data):
+        """ Compute keypoints, scores, descriptors for image """
+        x = self.encode(data)
+        keypoints, scores = self.extract_keypoints(x)
+        descriptors = self.compute_descriptors(x, keypoints)
 
         return {
             'keypoints': keypoints,
             'scores': scores,
             'descriptors': descriptors,
         }
+
+    def computeDescriptorsAndScores(self, data):
+        """ Compute descriptors & scores for given keypoints in data['keypoints'] """
+        x = self.encode(data)
+
+        # Compute descriptors
+        descriptors = self.compute_descriptors(x, data.get('keypoints'))
+
+        # Convert (x, y) to (h, w)
+        keypoints = [torch.flip(k, [1]).long() for k in data.get('keypoints')]
+
+        # Compute scores
+        scores, _, _ = self.compute_scores(x)
+        scores = [s[tuple(k.t())] for s, k in zip(scores, keypoints)]
+
+        return descriptors, scores
