@@ -121,7 +121,7 @@ parser.add_argument(
     '--batch_size', type=int, default=1,
     help='batch_size')
 parser.add_argument(
-    '--train_path', type=str, default='assets/freiburg_sequence/', # MSCOCO2014_yingxin
+    '--train_path', type=str, default='/data/Data/COCO2017/images/train2017/', # MSCOCO2014_yingxin
     help='Path to the directory of training imgs.')
 # parser.add_argument(
 #     '--nfeatures', type=int, default=1024,
@@ -244,7 +244,7 @@ if __name__ == '__main__':
 
 
         epoch_loss /= len(train_loader)
-        model_out_path = "model_epoch_{}.pth".format(epoch)
+        model_out_path = "exp/model_epoch_{}.pth".format(epoch)
         torch.save(superglue, model_out_path)
         print("Epoch [{}/{}] done. Epoch Loss {}. Checkpoint saved to {}"
             .format(epoch, opt.epoch, epoch_loss, model_out_path))
