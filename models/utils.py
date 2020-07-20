@@ -256,11 +256,13 @@ def process_resize(w, h, resize):
     return w_new, h_new
 
 
-def frame2tensor(frame):
-    return torch.from_numpy(frame/255.).float()[None, None].cuda()
+def frame2tensor(frame, device):
+    return torch.from_numpy(frame/255.).float()[None, None].to(device)
 
+def array2tensor(data, device):
+    return torch.from_numpy(data).float()[None].to(device)
 
-def read_image(path, resize, rotation, resize_float):
+def read_image(path, device, resize, rotation, resize_float):
     image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if image is None:
         return None, None, None
@@ -278,7 +280,7 @@ def read_image(path, resize, rotation, resize_float):
         if rotation % 2:
             scales = scales[::-1]
 
-    inp = frame2tensor(image)
+    inp = frame2tensor(image, device)
     return image, inp, scales
 
 
