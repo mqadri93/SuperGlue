@@ -1,7 +1,7 @@
 # SuperGlue PyTorch Implementation
 
 ## Introduction
- The SuperGlue network is a Graph Neural Network combined with an Optimal Matching layer that is trained to perform matching on two sets of sparse image features. This repo includes PyTorch code for training the SuperGlue matching network on top of [SIFT](http://www.diva-portal.org/smash/get/diva2:480321/FULLTEXT02) keypoints and descriptors. SuperGlue operates as a "middle-end," performing context aggregation, matching, and filtering in a single end-to-end architecture. For more details, please see:
+ The SuperGlue network is a Graph Neural Network combined with an Optimal Matching layer that is trained to perform matching on two sets of sparse image features. This repo includes PyTorch code for training the SuperGlue matching network on top of both [SuperGlue](https://arxiv.org/abs/1911.11763) and [SIFT](http://www.diva-portal.org/smash/get/diva2:480321/FULLTEXT02) keypoints and descriptors. SuperGlue operates as a "middle-end," performing context aggregation, matching, and filtering in a single end-to-end architecture. For more details, please see:
 
 * Full paper PDF: [SuperGlue: Learning Feature Matching with Graph Neural Networks](https://arxiv.org/abs/1911.11763).
 
@@ -21,17 +21,19 @@ Or create a conda environment by `conda install --name myenv --file superglue.tx
 There are two main top-level scripts in this repo:
 
 1. `train.py` : trains the superglue model.
-2. `load_data.py`: reads images from files and creates pairs. It generates keypoints, descriptors and ground truth matches which will be used in training.
+2. `datasets/sift_dataset.py`: reads images from files and creates pairs. It generates SIFT keypoints, descriptors and ground truth matches which will be used in training.
+3. `datasets/superpoint_dataset.py`: reads images from files and creates pairs. It generates SuperPoint keypoints, descriptors and ground truth matches which will be used in training.
 
 ### Training Directions
 
-To train the SuperGlue with default parameters, run the following command:
+To train the SuperGlue with default parameters (SuperPoint detector), run the following command:
 
 ```sh
 python train.py
 ```
 
 ### Additional useful command line parameters
+* Use `--detector` to set the detector mode : superpoint or sift (default: `superpoint`).
 * Use `--epoch` to set the number of epochs (default: `20`).
 * Use `--train_path` to set the path to the directory of training images.
 * Use `--eval_output_dir` to set the path to the directory in which the visualizations is written (default: `dump_match_pairs/`).
