@@ -33,7 +33,7 @@ python train.py
 ```
 
 ### Additional useful command line parameters
-* Use `--detector` to set the detector mode : superpoint or sift (default: `superpoint`).
+* Use `--detector` to set the detector mode : `superpoint` or `sift` (default: `superpoint`).
 * Use `--epoch` to set the number of epochs (default: `20`).
 * Use `--train_path` to set the path to the directory of training images.
 * Use `--eval_output_dir` to set the path to the directory in which the visualizations is written (default: `dump_match_pairs/`).
