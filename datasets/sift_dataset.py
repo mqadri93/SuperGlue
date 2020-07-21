@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append('./')
+
 import numpy as np
 import torch
 import os
@@ -8,16 +12,29 @@ import datetime
 from scipy.spatial.distance import cdist
 from torch.utils.data import Dataset
 
-from skimage import io, transform
-from skimage.color import rgb2gray
+# from skimage import io, transform
+# from skimage.color import rgb2gray
+#
+# from models.superpoint import SuperPoint
+# from models.utils import frame2tensor, array2tensor
 
-class SparseDataset(Dataset):
+
+class SIFTDataset(Dataset):
     """Sparse correspondences dataset."""
 
-    def __init__(self, train_path, nfeatures):
+    def __init__(self, image_path, image_list = None, nfeatures = 1024):
 
-        self.files = []
-        self.files += [train_path + f for f in os.listdir(train_path)]
+        print('Using SIFT dataset')
+
+        self.image_path = image_path
+
+        # Get image names
+        if image_list != None:
+            with open(image_list) as f:
+                self.image_names = f.read().splitlines()
+        else:
+            self.image_names = [ name for name in os.listdir(image_path)
+                if name.endswith('jpg') or name.endswith('png') ]
 
         self.nfeatures = nfeatures
         self.sift = cv2.xfeatures2d.SIFT_create(nfeatures=self.nfeatures)
@@ -28,15 +45,16 @@ class SparseDataset(Dataset):
         self.matcher = cv2.BFMatcher_create(cv2.NORM_L1, crossCheck=False)
 
     def __len__(self):
-        return len(self.files)
+        return len(self.image_names)
 
     def __getitem__(self, idx):
 
-		# load precalculated correspondences
-		# data = np.load(self.files[idx], allow_pickle=True)
+        # load precalculated correspondences
+        # data = np.load(self.files[idx], allow_pickle=True)
 
-        file_name = self.files[idx]
-        image = cv2.imread(file_name, cv2.IMREAD_GRAYSCALE)
+        # Read image
+        image = cv2.imread(os.path.join(self.image_path, self.image_names[idx]), cv2.IMREAD_GRAYSCALE)
+
         # 使用 IO 读取图像 rgb
         # rgb_img = io.imread(file_name)
         # image = rgb2gray(rgb_img)
@@ -47,8 +65,8 @@ class SparseDataset(Dataset):
         warp = np.random.randint(-224, 224, size=(4, 2)).astype(np.float32)
 
         M = cv2.getPerspectiveTransform(corners, corners + warp)
-        warped = cv2.warpPerspective(src=image, M=M, dsize=(image.shape[1], image.shape[0])) # return an image type
-        
+        warped = cv2.warpPerspective(src=image, M=M, dsize=(image.shape[1], image.shape[0]))  # return an image type
+
         kp1, descs1 = sift.detectAndCompute(image, None)
         kp2, descs2 = sift.detectAndCompute(warped, None)
 
@@ -57,12 +75,13 @@ class SparseDataset(Dataset):
         kp1 = kp1[:kp1_num]
         kp2 = kp2[:kp2_num]
 
-        kp1_np = np.array([(kp.pt[0], kp.pt[1]) for kp in kp1]).astype(np.float32) # maybe coordinates pt has 3 dimentions; kp1_np.shape=(50,)
+        kp1_np = np.array([(kp.pt[0], kp.pt[1]) for kp in kp1]).astype(
+            np.float32)  # maybe coordinates pt has 3 dimentions; kp1_np.shape=(50,)
         kp2_np = np.array([(kp.pt[0], kp.pt[1]) for kp in kp2]).astype(np.float32)
 
         if len(kp1) < 1 or len(kp2) < 1:
             # print("no kp: ",file_name)
-            return{
+            return {
                 'keypoints0': torch.zeros([0, 0, 2], dtype=torch.float32),
                 'keypoints1': torch.zeros([0, 0, 2], dtype=torch.float32),
                 'descriptors0': torch.zeros([0, 2], dtype=torch.float32),
@@ -70,13 +89,13 @@ class SparseDataset(Dataset):
                 'image0': image,
                 'image1': warped,
                 'file_name': file_name
-            } 
-        #     descs1 = np.zeros((1, sift.descriptorSize()), np.float32)
+            }
+            #     descs1 = np.zeros((1, sift.descriptorSize()), np.float32)
         # if len(kp2) < 1:
         #     descs2 = np.zeros((1, sift.descriptorSize()), np.float32)
 
-        scores1_np = np.array([kp.response for kp in kp1]) # confidence of each key point
-        scores2_np = np.array([kp.response for kp in kp2])
+        scores1_np = np.array([kp.response for kp in kp1], dtype=np.float32)  # confidence of each key point
+        scores2_np = np.array([kp.response for kp in kp2], dtype=np.float32)
 
         kp1_np = kp1_np[:kp1_num, :]
         kp2_np = kp2_np[:kp2_num, :]
@@ -85,7 +104,7 @@ class SparseDataset(Dataset):
 
         matched = self.matcher.match(descs1, descs2)
 
-        kp1_projected = cv2.perspectiveTransform(kp1_np.reshape((1, -1, 2)), M)[0, :, :] # why [0, :, :]
+        kp1_projected = cv2.perspectiveTransform(kp1_np.reshape((1, -1, 2)), M)[0, :, :]  # why [0, :, :]
         # kp1_projected = cv2.perspectiveTransform(kp1_np.reshape((-1, 2)), M) # why [0, :, :]
 
         dists = cdist(kp1_projected, kp2_np)
@@ -144,10 +163,10 @@ class SparseDataset(Dataset):
         descs2 = np.transpose(descs2 / 256.)
 
         # 归一化+通道数扩充一维
-        image = torch.from_numpy(image/255.).float().unsqueeze(0).cuda()
-        warped = torch.from_numpy(warped/255.).float().unsqueeze(0).cuda()
+        image = torch.from_numpy(image / 255.).float().unsqueeze(0).cuda()
+        warped = torch.from_numpy(warped / 255.).float().unsqueeze(0).cuda()
 
-        return{
+        return {
             'keypoints0': list(kp1_np),
             'keypoints1': list(kp2_np),
             'descriptors0': list(descs1),
@@ -157,6 +176,6 @@ class SparseDataset(Dataset):
             'image0': image,
             'image1': warped,
             'all_matches': list(all_matches),
-            'file_name': file_name
-        } 
+            'file_name': self.image_names[idx],
+        }
 

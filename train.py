@@ -7,12 +7,16 @@ import matplotlib.cm as cm
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from load_data import SparseDataset
+
+# Datasets
+from datasets.sift_dataset import SIFTDataset
+from datasets.superpoint_dataset import SuperPointDataset
+
 import os
 import torch.multiprocessing
 from tqdm import tqdm
 
-torch.backends.cudnn.benchmark = True
+# torch.backends.cudnn.benchmark = True
 
 # from models.matching import Matching
 from models.utils import (compute_pose_error, compute_epipolar_error,
@@ -49,6 +53,9 @@ parser.add_argument(
     help='Perform the evaluation'
             ' (requires ground truth pose and intrinsics)')
 
+parser.add_argument(
+    '--detector', choices={'superpoint', 'sift'}, default='superpoint',
+    help='Keypoint detector')
 parser.add_argument(
     '--superglue', choices={'indoor', 'outdoor'}, default='indoor',
     help='SuperGlue weights')
@@ -121,7 +128,7 @@ parser.add_argument(
     '--batch_size', type=int, default=1,
     help='batch_size')
 parser.add_argument(
-    '--train_path', type=str, default='assets/freiburg_sequence/', # MSCOCO2014_yingxin
+    '--train_path', type=str, default='assets/freiburg_sequence', # MSCOCO2014_yingxin
     help='Path to the directory of training imgs.')
 # parser.add_argument(
 #     '--nfeatures', type=int, default=1024,
@@ -148,20 +155,40 @@ if __name__ == '__main__':
     eval_output_dir.mkdir(exist_ok=True, parents=True)
     print('Will write visualization images to',
         'directory \"{}\"'.format(eval_output_dir))
+
+    # detector_factory = {
+    #     'superpoint': SuperPointDataset,
+    #     'sift': SIFTDataset,
+    # }
+    detector_dims = {
+        'superpoint': 256,
+        'sift': 128,
+    }
+
     config = {
         'superpoint': {
             'nms_radius': opt.nms_radius,
             'keypoint_threshold': opt.keypoint_threshold,
-            'max_keypoints': opt.max_keypoints
+            'max_keypoints': opt.max_keypoints,
         },
         'superglue': {
             'weights': opt.superglue,
             'sinkhorn_iterations': opt.sinkhorn_iterations,
             'match_threshold': opt.match_threshold,
+            'descriptor_dim': detector_dims[opt.detector],
         }
     }
 
-    train_set = SparseDataset(opt.train_path, opt.max_keypoints)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Set data loader
+    if opt.detector == 'superpoint':
+        train_set = SuperPointDataset(opt.train_path, device=device, superpoint_config=config.get('superpoint', {}))
+    elif opt.detector == 'sift':
+        train_set = SIFTDataset(opt.train_path, nfeatures=opt.max_keypoints)
+    else:
+        RuntimeError('Error detector : {}'.format(opt.detector))
+
     train_loader = torch.utils.data.DataLoader(dataset=train_set, shuffle=False, batch_size=opt.batch_size, drop_last=True)
 
     # superpoint = SuperPoint(config.get('superpoint', {}))
@@ -237,14 +264,14 @@ if __name__ == '__main__':
 
 
             if (i+1) % 5e3 == 0:
-                model_out_path = "model_epoch_{}.pth".format(epoch)
+                model_out_path = "exp/model_epoch_{}.pth".format(epoch)
                 torch.save(superglue, model_out_path)
                 print ('Epoch [{}/{}], Step [{}/{}], Checkpoint saved to {}' 
                     .format(epoch, opt.epoch, i+1, len(train_loader), model_out_path)) 
 
 
         epoch_loss /= len(train_loader)
-        model_out_path = "model_epoch_{}.pth".format(epoch)
+        model_out_path = "exp/model_epoch_{}.pth".format(epoch)
         torch.save(superglue, model_out_path)
         print("Epoch [{}/{}] done. Epoch Loss {}. Checkpoint saved to {}"
             .format(epoch, opt.epoch, epoch_loss, model_out_path))

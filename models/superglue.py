@@ -196,7 +196,7 @@ class SuperGlue(nn.Module):
 
     """
     default_config = {
-        'descriptor_dim': 128,
+        'descriptor_dim': 256,
         'weights': 'indoor',
         'keypoint_encoder': [32, 64, 128],
         'GNN_layers': ['self', 'cross'] * 9,
@@ -207,6 +207,8 @@ class SuperGlue(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = {**self.default_config, **config}
+
+        # print('config = {}'.format(config))
 
         self.kenc = KeypointEncoder(
             self.config['descriptor_dim'], self.config['keypoint_encoder'])
