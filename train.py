@@ -12,20 +12,23 @@ from torch.autograd import Variable
 from datasets.sift_dataset import SIFTDataset
 from datasets.superpoint_dataset import SuperPointDataset
 
+# TensorBoard
+from torch.utils.tensorboard import SummaryWriter
+
 import os
 import torch.multiprocessing
+import time
 from tqdm import tqdm
 
 # torch.backends.cudnn.benchmark = True
 
 # from models.matching import Matching
 from models.utils import (compute_pose_error, compute_epipolar_error,
-                          estimate_pose, make_matching_plot,
+                          estimate_pose, make_matching_plot, report_matching_plot,
                           error_colormap, AverageTimer, pose_auc, read_image,
                           rotate_intrinsics, rotate_pose_inplane,
                           scale_intrinsics, read_image_modified)
 
-from models.superpoint import SuperPoint
 from models.superglue import SuperGlue
 from models.matchingForTraining import MatchingForTraining
 
@@ -44,6 +47,12 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 parser = argparse.ArgumentParser(
     description='Image pair matching and pose evaluation with SuperGlue',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# 实验名称
+parser.add_argument("--exp_id", default='superglue', type=str, help='Experiment name')
+
+# 实验时间（用于自动的实验管理，train.sh 脚本输入）
+t_str = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+parser.add_argument("--time", default=t_str, type=str, help='Experiment time')
 
 parser.add_argument(
     '--viz', action='store_true',
@@ -137,8 +146,6 @@ parser.add_argument(
     '--epoch', type=int, default=20,
     help='Number of epoches')
 
-
-
 if __name__ == '__main__':
     opt = parser.parse_args()
     print(opt)
@@ -147,8 +154,6 @@ if __name__ == '__main__':
     assert not (opt.opencv_display and not opt.fast_viz), 'Cannot use --opencv_display without --fast_viz'
     assert not (opt.fast_viz and not opt.viz), 'Must use --viz with --fast_viz'
     assert not (opt.fast_viz and opt.viz_extension == 'pdf'), 'Cannot use pdf extension with --fast_viz'
-
-
 
     # store viz results
     eval_output_dir = Path(opt.eval_output_dir)
@@ -181,6 +186,16 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # Init tensorboard writer
+    EXP_PATH = "exp/{}.{}_{}".format(opt.exp_id, opt.detector, opt.time)
+
+    print('EXP_PATH = {}'.format(EXP_PATH))
+
+    writer = SummaryWriter(EXP_PATH)
+
+    if os.path.exists(EXP_PATH) == False:
+        os.makedirs(EXP_PATH)
+
     # Set data loader
     if opt.detector == 'superpoint':
         train_set = SuperPointDataset(opt.train_path, device=device, superpoint_config=config.get('superpoint', {}))
@@ -191,17 +206,15 @@ if __name__ == '__main__':
 
     train_loader = torch.utils.data.DataLoader(dataset=train_set, shuffle=False, batch_size=opt.batch_size, drop_last=True)
 
-    # superpoint = SuperPoint(config.get('superpoint', {}))
     superglue = SuperGlue(config.get('superglue', {}))
     if torch.cuda.is_available():
-        # superpoint.cuda()
         superglue.cuda()
     else:
         print("### CUDA not available ###")
     optimizer = torch.optim.Adam(superglue.parameters(), lr=opt.learning_rate)
 
     mean_loss = []
-    for epoch in range(1, opt.epoch+1):
+    for epoch in range(0, opt.epoch):
         epoch_loss = 0
         superglue.train()
         # train_loader = tqdm(train_loader)
@@ -225,13 +238,17 @@ if __name__ == '__main__':
             superglue.zero_grad()
             Loss = pred['loss']
             epoch_loss += Loss.item()
-            mean_loss.append(Loss) # every 10 pairs
+            mean_loss.append(Loss.item()) # every 10 pairs
             Loss.backward()
             optimizer.step()
 
-            if (i+1) % 100 == 0:
+            # TensorBoard log
+            writer.add_scalar('Train/loss', Loss.item(), epoch)
+
+            if i % 100 == 0:
+                curr_mean_loss = np.array(mean_loss).mean()
                 print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}' 
-                    .format(epoch, opt.epoch, i+1, len(train_loader), torch.mean(torch.stack(mean_loss)).item()))   # Loss.item()    
+                    .format(epoch, opt.epoch, i, len(train_loader), curr_mean_loss))   # Loss.item()
                 mean_loss = []
 
                 ### eval ###
@@ -251,29 +268,40 @@ if __name__ == '__main__':
                 stem = pred['file_name']
                 text = []
 
-                make_matching_plot(
+                # make_matching_plot(
+                #     image0, image1, kpts0, kpts1, mkpts0, mkpts1, color,
+                #     text, viz_path, stem, stem, opt.show_keypoints,
+                #     opt.fast_viz, opt.opencv_display, 'Matches')
+
+                # file_name = pred['file_name']
+                fig_name = 'Train/matching/{}'.format(stem)
+
+                # Report matching plot to tensorboard
+                report_matching_plot(
                     image0, image1, kpts0, kpts1, mkpts0, mkpts1, color,
                     text, viz_path, stem, stem, opt.show_keypoints,
-                    opt.fast_viz, opt.opencv_display, 'Matches')
+                    opt.fast_viz, opt.opencv_display, 'Matches',
+                    writer=writer, title=fig_name, epoch=epoch)
 
 
-
-                # Estimate the pose and compute the pose error.
+                # TODO: Estimate the pose and compute the pose error.
                 
 
 
 
             if (i+1) % 5e3 == 0:
-                model_out_path = "exp/model_epoch_{}.pth".format(epoch)
+                model_out_path = "{}/model_epoch_{}.pth".format(EXP_PATH, epoch)
                 torch.save(superglue, model_out_path)
                 print ('Epoch [{}/{}], Step [{}/{}], Checkpoint saved to {}' 
                     .format(epoch, opt.epoch, i+1, len(train_loader), model_out_path)) 
 
 
         epoch_loss /= len(train_loader)
-        model_out_path = "exp/model_epoch_{}.pth".format(epoch)
+        model_out_path = "{}/model_epoch_{}.pth".format(EXP_PATH, epoch)
         torch.save(superglue, model_out_path)
-        print("Epoch [{}/{}] done. Epoch Loss {}. Checkpoint saved to {}"
+        print("Epoch [{}/{}] done. Epoch Loss {:.4f}. Checkpoint saved to {}"
             .format(epoch, opt.epoch, epoch_loss, model_out_path))
+
+    writer.close()
         
 

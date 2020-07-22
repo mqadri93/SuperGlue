@@ -463,6 +463,48 @@ def plot_matches(kpts0, kpts1, color, lw=1.5, ps=4):
     ax[1].scatter(kpts1[:, 0], kpts1[:, 1], c=color, s=ps)
 
 
+def report_matching_plot(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
+                       color, text, path, name0, name1, show_keypoints=False,
+                       fast_viz=False, opencv_display=False, opencv_title='matches',
+                       writer=None, title='matching', epoch=0):
+    if fast_viz:
+        make_matching_plot_fast(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
+                                color, text, path, show_keypoints, 10,
+                                opencv_display, opencv_title)
+        return
+
+    plot_image_pair([image0, image1])
+    if show_keypoints:
+        plot_keypoints(kpts0, kpts1, color='k', ps=4)
+        plot_keypoints(kpts0, kpts1, color='w', ps=2)
+    plot_matches(mkpts0, mkpts1, color)
+
+    fig = plt.gcf()
+    txt_color = 'k' if image0[:100, :150].mean() > 200 else 'w'
+    fig.text(
+        0.01, 0.99, '\n'.join(text), transform=fig.axes[0].transAxes,
+        fontsize=15, va='top', ha='left', color=txt_color)
+
+    txt_color = 'k' if image0[-100:, :150].mean() > 200 else 'w'
+    fig.text(
+        0.01, 0.01, name0, transform=fig.axes[0].transAxes,
+        fontsize=5, va='bottom', ha='left', color=txt_color)
+
+    txt_color = 'k' if image1[-100:, :150].mean() > 200 else 'w'
+    fig.text(
+        0.01, 0.01, name1, transform=fig.axes[1].transAxes,
+        fontsize=5, va='bottom', ha='left', color=txt_color)
+
+    plt.savefig(str(path), bbox_inches='tight', pad_inches=0)
+
+    # print('Writer figure : {}'.format(title))
+    writer.add_figure(title, fig, epoch)
+
+    # 关闭 fig 节省内存
+    plt.cla()
+    plt.close(fig)
+
+
 def make_matching_plot(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
                        color, text, path, name0, name1, show_keypoints=False,
                        fast_viz=False, opencv_display=False, opencv_title='matches'):
