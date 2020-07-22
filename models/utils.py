@@ -467,6 +467,7 @@ def report_matching_plot(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
                        color, text, path, name0, name1, show_keypoints=False,
                        fast_viz=False, opencv_display=False, opencv_title='matches',
                        writer=None, title='matching', epoch=0):
+    # save_path = writer.get_logdir()
     if fast_viz:
         make_matching_plot_fast(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
                                 color, text, path, show_keypoints, 10,
@@ -495,7 +496,7 @@ def report_matching_plot(image0, image1, kpts0, kpts1, mkpts0, mkpts1,
         0.01, 0.01, name1, transform=fig.axes[1].transAxes,
         fontsize=5, va='bottom', ha='left', color=txt_color)
 
-    plt.savefig(str(path), bbox_inches='tight', pad_inches=0)
+    plt.savefig('{}/{}_{}'.format(path, epoch, name0), bbox_inches='tight', pad_inches=0)
 
     # print('Writer figure : {}'.format(title))
     writer.add_figure(title, fig, epoch)

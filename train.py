@@ -18,7 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 import torch.multiprocessing
 import time
-from tqdm import tqdm
+# from tqdm import tqdm
 
 # torch.backends.cudnn.benchmark = True
 
@@ -155,8 +155,14 @@ if __name__ == '__main__':
     assert not (opt.fast_viz and not opt.viz), 'Must use --viz with --fast_viz'
     assert not (opt.fast_viz and opt.viz_extension == 'pdf'), 'Cannot use pdf extension with --fast_viz'
 
+    # Init experiment path
+    EXP_NAME = "{}.{}_{}".format(opt.exp_id, opt.detector, opt.time)
+    EXP_PATH = "exp/{}".format(EXP_NAME)
+
+    print('EXP_PATH = {}'.format(EXP_PATH))
+
     # store viz results
-    eval_output_dir = Path(opt.eval_output_dir)
+    eval_output_dir = Path('{}/{}/'.format(opt.eval_output_dir, EXP_NAME))
     eval_output_dir.mkdir(exist_ok=True, parents=True)
     print('Will write visualization images to',
         'directory \"{}\"'.format(eval_output_dir))
@@ -187,9 +193,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Init tensorboard writer
-    EXP_PATH = "exp/{}.{}_{}".format(opt.exp_id, opt.detector, opt.time)
 
-    print('EXP_PATH = {}'.format(EXP_PATH))
 
     writer = SummaryWriter(EXP_PATH)
 
@@ -279,7 +283,7 @@ if __name__ == '__main__':
                 # Report matching plot to tensorboard
                 report_matching_plot(
                     image0, image1, kpts0, kpts1, mkpts0, mkpts1, color,
-                    text, viz_path, stem, stem, opt.show_keypoints,
+                    text, eval_output_dir, stem, stem, opt.show_keypoints,
                     opt.fast_viz, opt.opencv_display, 'Matches',
                     writer=writer, title=fig_name, epoch=epoch)
 
