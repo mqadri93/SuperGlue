@@ -33,6 +33,7 @@ python train.py
 ```
 
 ### Additional useful command line parameters
+* Use `--exp_id` to set experiment id or name (default: `superglue`).
 * Use `--detector` to set the detector mode : `superpoint` or `sift` (default: `superpoint`).
 * Use `--epoch` to set the number of epochs (default: `20`).
 * Use `--train_path` to set the path to the directory of training images.
