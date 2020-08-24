@@ -6,13 +6,15 @@ import numpy as np
 import matplotlib.cm as cm
 import torch
 import torch.nn as nn
+import time
 from torch.autograd import Variable
-
+import os
+import psutil
 # Datasets
 from datasets.sift_dataset import SIFTDataset
 from datasets.superpoint_dataset import SuperPointDataset
 
-import os
+import os, sys
 import torch.multiprocessing
 from tqdm import tqdm
 
@@ -54,7 +56,7 @@ parser.add_argument(
             ' (requires ground truth pose and intrinsics)')
 
 parser.add_argument(
-    '--detector', choices={'superpoint', 'sift'}, default='superpoint',
+    '--detector', choices={'superpoint', 'sift'}, default='sift',
     help='Keypoint detector')
 parser.add_argument(
     '--superglue', choices={'indoor', 'outdoor'}, default='indoor',
@@ -128,18 +130,19 @@ parser.add_argument(
     '--batch_size', type=int, default=1,
     help='batch_size')
 parser.add_argument(
-    '--train_path', type=str, default='assets/freiburg_sequence', # MSCOCO2014_yingxin
+    '--train_path', type=str, default='assets/scannet_sample_images', # MSCOCO2014_yingxin
     help='Path to the directory of training imgs.')
 # parser.add_argument(
 #     '--nfeatures', type=int, default=1024,
 #     help='Number of feature points to be extracted initially, in each img.')
 parser.add_argument(
-    '--epoch', type=int, default=20,
+    '--epoch', type=int, default=50000,
     help='Number of epoches')
 
 
 
 if __name__ == '__main__':
+    process = psutil.Process(os.getpid())
     opt = parser.parse_args()
     print(opt)
 
@@ -176,16 +179,17 @@ if __name__ == '__main__':
             'sinkhorn_iterations': opt.sinkhorn_iterations,
             'match_threshold': opt.match_threshold,
             'descriptor_dim': detector_dims[opt.detector],
+            'detector': opt.detector
         }
     }
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
     # Set data loader
     if opt.detector == 'superpoint':
         train_set = SuperPointDataset(opt.train_path, device=device, superpoint_config=config.get('superpoint', {}))
     elif opt.detector == 'sift':
         train_set = SIFTDataset(opt.train_path, nfeatures=opt.max_keypoints)
+        print(len(train_set))
     else:
         RuntimeError('Error detector : {}'.format(opt.detector))
 
@@ -202,6 +206,10 @@ if __name__ == '__main__':
 
     mean_loss = []
     for epoch in range(1, opt.epoch+1):
+        print(process.memory_info().vms)
+        if process.memory_info().vms > 20170870272:
+            print("Warning the memory usage is too high. Exiting")
+            sys.exit()
         epoch_loss = 0
         superglue.train()
         # train_loader = tqdm(train_loader)
@@ -212,20 +220,19 @@ if __name__ == '__main__':
                         pred[k] = Variable(pred[k].cuda())
                     else:
                         pred[k] = Variable(torch.stack(pred[k]).cuda())
-                
             data = superglue(pred)
 
             for k, v in pred.items():
                 pred[k] = v[0]
             pred = {**pred, **data}
-
             if pred['skip_train'] == True: # image has no keypoint
                 continue
 
             superglue.zero_grad()
             Loss = pred['loss']
-            epoch_loss += Loss.item()
-            mean_loss.append(Loss) # every 10 pairs
+            loss = Loss.detach()
+            epoch_loss += loss.item()
+            mean_loss.append(loss.item()) # every 10 pairs
             Loss.backward()
             optimizer.step()
 
@@ -268,11 +275,9 @@ if __name__ == '__main__':
                 torch.save(superglue, model_out_path)
                 print ('Epoch [{}/{}], Step [{}/{}], Checkpoint saved to {}' 
                     .format(epoch, opt.epoch, i+1, len(train_loader), model_out_path)) 
-
-
         epoch_loss /= len(train_loader)
-        model_out_path = "exp/model_epoch_{}.pth".format(epoch)
-        torch.save(superglue, model_out_path)
+        model_out_path = "exp/model_epoch_{}.pth".format(opt.detector)
+        torch.save(superglue.state_dict(), model_out_path)
         print("Epoch [{}/{}] done. Epoch Loss {}. Checkpoint saved to {}"
             .format(epoch, opt.epoch, epoch_loss, model_out_path))
         

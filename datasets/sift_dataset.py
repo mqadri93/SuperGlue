@@ -53,6 +53,7 @@ class SIFTDataset(Dataset):
         # data = np.load(self.files[idx], allow_pickle=True)
 
         # Read image
+        #print(os.path.join(self.image_path, self.image_names[idx]))
         image = cv2.imread(os.path.join(self.image_path, self.image_names[idx]), cv2.IMREAD_GRAYSCALE)
 
         # 使用 IO 读取图像 rgb
@@ -88,7 +89,7 @@ class SIFTDataset(Dataset):
                 'descriptors1': torch.zeros([0, 2], dtype=torch.float32),
                 'image0': image,
                 'image1': warped,
-                'file_name': file_name
+                'file_name': self.image_names[idx]
             }
             #     descs1 = np.zeros((1, sift.descriptorSize()), np.float32)
         # if len(kp2) < 1:

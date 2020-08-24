@@ -48,11 +48,12 @@ from .superglue import SuperGlue
 
 class Matching(torch.nn.Module):
     """ Image Matching Frontend (SuperPoint + SuperGlue) """
-    def __init__(self, config={}):
+    def __init__(self, config={}, is_train=True):
         super().__init__()
+        self.is_train = is_train
         self.superpoint = SuperPoint(config.get('superpoint', {}))
         self.superglue = SuperGlue(config.get('superglue', {}))
-
+        self.config_superglue = config.get('superglue', {})
     def forward(self, data):
         """ Run SuperPoint (optionally) and SuperGlue
         SuperPoint is skipped if ['keypoints0', 'keypoints1'] exist in input
@@ -62,23 +63,37 @@ class Matching(torch.nn.Module):
         pred = {}
 
         # Extract SuperPoint (keypoints, scores, descriptors) if not provided
-        if 'keypoints0' not in data:
-            pred0 = self.superpoint({'image': data['image0']})
-            pred = {**pred, **{k+'0': v for k, v in pred0.items()}}
-        if 'keypoints1' not in data:
-            pred1 = self.superpoint({'image': data['image1']})
-            pred = {**pred, **{k+'1': v for k, v in pred1.items()}}
-
+        if self.config_superglue['detector'] == "superpoint":
+            if 'keypoints0' not in data:
+                pred0 = self.superpoint({'image': data['image0']})
+                pred = {**pred, **{k+'0': v for k, v in pred0.items()}}
+            if 'keypoints1' not in data:
+                pred1 = self.superpoint({'image': data['image1']})
+                pred = {**pred, **{k+'1': v for k, v in pred1.items()}}
+        elif self.config_superglue['detector'] == "sift":
+            pred = {
+                'keypoints0': data['keypoints0'], 
+                'keypoints1': data['keypoints1'],
+                'descriptors0': data['descriptors0'],
+                'descriptors1': data['descriptors1']
+            }
         # Batch all features
         # We should either have i) one image per batch, or
         # ii) the same number of local features for all images in the batch.
         data = {**data, **pred}
 
+
         for k in data:
             if isinstance(data[k], (list, tuple)):
                 data[k] = torch.stack(data[k])
-
+        #print("=======================")
+        #print(data['keypoints0'].shape)
+        #print(data['descriptors0'].shape)
+        #print(data['scores0'][0].shape)
+        #print(data['keypoints1'].shape)
+        #print(data['descriptors1'].shape)
+        #print(data['scores1'][0].shape)
         # Perform the matching
-        pred = {**pred, **self.superglue(data)}
+        pred = {**pred, **self.superglue(data, is_train=self.is_train)}
 
         return pred

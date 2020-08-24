@@ -50,7 +50,7 @@ import random
 import numpy as np
 import matplotlib.cm as cm
 import torch
-
+import cv2
 
 from models.matching import Matching
 from models.utils import (compute_pose_error, compute_epipolar_error,
@@ -76,6 +76,10 @@ if __name__ == '__main__':
              ' (requires ground truth pose and intrinsics)')
 
     parser.add_argument(
+    '--detector', choices={'superpoint', 'sift'}, default='sift',
+    help='Keypoint detector')
+
+    parser.add_argument(
         '--superglue', choices={'indoor', 'outdoor'}, default='indoor',
         help='SuperGlue weights')
     parser.add_argument(
@@ -97,7 +101,7 @@ if __name__ == '__main__':
         help='SuperGlue match threshold')
 
     parser.add_argument(
-        '--resize', type=int, nargs='+', default=[640, 480],
+        '--resize', type=int, nargs='+', default=[-1], #default=[640, 480],
         help='Resize the input image before running inference. If two numbers, '
              'resize to the exact dimensions, if one number, resize the max '
              'dimension, if -1, do not resize')
@@ -142,6 +146,10 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     print(opt)
 
+    detector_dims = {
+        'superpoint': 256,
+        'sift': 128,
+    }
     assert not (opt.opencv_display and not opt.viz), 'Must use --viz with --opencv_display'
     assert not (opt.opencv_display and not opt.fast_viz), 'Cannot use --opencv_display without --fast_viz'
     assert not (opt.fast_viz and not opt.viz), 'Must use --viz with --fast_viz'
@@ -161,7 +169,7 @@ if __name__ == '__main__':
 
     with open(opt.pairs_list, 'r') as f:
         pairs = [l.split() for l in f.readlines()]
-
+    
     if opt.max_length > -1:
         pairs = pairs[0:np.min([len(pairs), opt.max_length])]
 
@@ -173,23 +181,26 @@ if __name__ == '__main__':
             raise ValueError(
                 'All pairs should have ground truth info for evaluation.'
                 'File \"{}\" needs 38 valid entries per row'.format(opt.pairs_list))
-
+    opt.viz=True
     # Load the SuperPoint and SuperGlue models.
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('Running inference on device \"{}\"'.format(device))
+    
     config = {
         'superpoint': {
             'nms_radius': opt.nms_radius,
             'keypoint_threshold': opt.keypoint_threshold,
             'max_keypoints': opt.max_keypoints
-        },
+        }, 
         'superglue': {
             'weights': opt.superglue,
             'sinkhorn_iterations': opt.sinkhorn_iterations,
             'match_threshold': opt.match_threshold,
+            'descriptor_dim': detector_dims[opt.detector],
+            'detector': opt.detector
         }
     }
-    matching = Matching(config).eval().to(device)
+    matching = Matching(config, is_train=False).eval().to(device)
 
     # Create the output directories if they do not exist already.
     data_dir = Path(opt.data_dir)
@@ -262,6 +273,7 @@ if __name__ == '__main__':
             data_dir / name0, device, opt.resize, rot0, opt.resize_float)
         image1, inp1, scales1 = read_image(
             data_dir / name1, device, opt.resize, rot1, opt.resize_float)
+
         if image0 is None or image1 is None:
             print('Problem reading image pair: {} {}'.format(
                 data_dir/name0, data_dir/name1))
@@ -270,7 +282,57 @@ if __name__ == '__main__':
 
         if do_match:
             # Perform the matching.
-            pred = matching({'image0': inp0, 'image1': inp1})
+            if opt.detector == "sift":
+                nfeatures = 20
+                sift = cv2.xfeatures2d.SIFT_create(nfeatures=nfeatures)
+                matcher = cv2.BFMatcher_create(cv2.NORM_L1, crossCheck=False)
+                
+                image00 = cv2.imread(str(data_dir / name0), cv2.IMREAD_GRAYSCALE)
+                image11 = cv2.imread(str(data_dir / name1), cv2.IMREAD_GRAYSCALE)
+
+                kp1, descs1 = sift.detectAndCompute(image00, None)
+                kp2, descs2 = sift.detectAndCompute(image11, None)
+
+                kp1_num = min(nfeatures, len(kp1))
+                kp2_num = min(nfeatures, len(kp2))
+                kp1 = kp1[:kp1_num]
+                kp2 = kp2[:kp2_num]
+
+                descs1 = torch.from_numpy(descs1[:kp1_num]).cuda()
+                descs2 = torch.from_numpy(descs2[:kp2_num]).cuda()
+
+                descs1 = descs1.transpose(0, 1)
+                descs2 = descs2.transpose(0, 1)
+
+                descs1 = descs1.unsqueeze(0)
+                descs2 = descs2.unsqueeze(0)
+
+                scores1_np = np.array([kp.response for kp in kp1], dtype=np.float32)  # confidence of each key point
+                scores2_np = np.array([kp.response for kp in kp2], dtype=np.float32)
+
+                scores1_np = torch.from_numpy(scores1_np).to(torch.float32).cuda()
+                scores2_np = torch.from_numpy(scores2_np).to(torch.float32).cuda()
+
+                kpts1 = np.array([[float(int(X.pt[0])), float(int(X.pt[1]))] for X in kp1])
+                kpts2 = np.array([[float(int(X.pt[0])), float(int(X.pt[1]))] for X in kp2])
+
+                kpts1 = torch.from_numpy(kpts1).to(torch.float32).cuda()
+                kpts2 = torch.from_numpy(kpts2).to(torch.float32).cuda()
+
+                kpts1 = kpts1.unsqueeze(0)
+                kpts2 = kpts2.unsqueeze(0)
+
+
+                pred = matching({'image0': inp0, 
+                'image1': inp1, 
+                'keypoints0': kpts1, 
+                'keypoints1': kpts2,
+                'descriptors0': descs1,
+                'descriptors1': descs2,
+                'scores0': (scores1_np,),
+                'scores1': (scores2_np,)})
+            else:
+                pred = matching({'image0': inp0, 'image1': inp1})
             pred = {k: v[0].cpu().numpy() for k, v in pred.items()}
             kpts0, kpts1 = pred['keypoints0'], pred['keypoints1']
             matches, conf = pred['matches0'], pred['matching_scores0']
