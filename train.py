@@ -73,7 +73,7 @@ parser.add_argument(
     help='SuperPoint Non Maximum Suppression (NMS) radius'
     ' (Must be positive)')
 parser.add_argument(
-    '--sinkhorn_iterations', type=int, default=20,
+    '--sinkhorn_iterations', type=int, default=100,
     help='Number of Sinkhorn iterations performed by SuperGlue')
 parser.add_argument(
     '--match_threshold', type=float, default=0.2,

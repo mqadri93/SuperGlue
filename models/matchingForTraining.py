@@ -70,6 +70,7 @@ class MatchingForTraining(torch.nn.Module):
             pred1 = self.superpoint({'image': data['image1']})
             pred = {**pred, **{k+'1': v for k, v in pred1.items()}}
 
+        sys.exit()
         # Batch all features
         # We should either have i) one image per batch, or
         # ii) the same number of local features for all images in the batch.

@@ -47,6 +47,7 @@ from torch import nn
 import sys
 import psutil
 import os
+import numpy as np
 
 def MLP(channels: list, do_bn=True):
     """ Multi-layer perceptron """
@@ -225,7 +226,7 @@ class SuperGlue(nn.Module):
         bin_score = torch.nn.Parameter(torch.tensor(1.))
         self.register_parameter('bin_score', bin_score)
 
-        if True:
+        if False:
         #assert self.config['weights'] in ['indoor', 'outdoor']
             path = Path(__file__).parent
             path = "/home/remote_user2/SuperGlue/exp/model_epoch_{}.pth".format(self.config['detector'])
@@ -287,7 +288,7 @@ class SuperGlue(nn.Module):
         scores = log_optimal_transport(
             scores, self.bin_score,
             iters=self.config['sinkhorn_iterations'])
-
+        #print(scores.shape)
         # Get the matches with score above "match_threshold".
         max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
         indices0, indices1 = max0.indices, max1.indices
@@ -301,23 +302,49 @@ class SuperGlue(nn.Module):
         indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
         if self.is_train:
-            file_name = data['file_name']
-            all_matches = data['all_matches'].permute(1,2,0) # shape=torch.Size([1, 87, 2])
+            if self.config['detector'] == "sift":
+                file_name = data['file_name']
+                all_matches = data['all_matches'].permute(1,0,2)
 
-            # check if indexed correctly
-            loss = []
-            for i in range(len(all_matches[0])):
-                x = all_matches[0][i][0]
-                y = all_matches[0][i][1]
-                
-                loss.append(-torch.log( scores[0][x][y].exp() )) # check batch size == 1 ?
-            # for p0 in unmatched0:
-            #     loss += -torch.log(scores[0][p0][-1])
-            # for p1 in unmatched1:
-            #     loss += -torch.log(scores[0][-1][p1])
-            loss_mean = torch.mean(torch.stack(loss))
-            loss_mean = torch.reshape(loss_mean, (1, -1))
+                loss = []
+                s = scores.shape
 
+                P = scores*all_matches
+                loss = []
+                for b in range(P.shape[0]):
+                    loss_tmp = 0
+                    P1 = P[b]
+                    indices = P1 != 0
+                    P1 = P1[indices]
+                    loss.append(-torch.log(P1.exp()))
+                    #for row in P1.split(1): 
+                    #    for r in row.squeeze(): 
+                    #        if r!=0:
+                    #print(loss_tmp)
+                loss_mean = torch.mean(torch.stack(loss))
+                loss_mean = torch.reshape(loss_mean, (1, -1))
+                #indices = torch.where(all_matches==1)
+                #print(indices)
+                #for ind in indices:
+                #    loss.append(-torch.log( scores[0][ind[0]][ind[1]].exp() ))
+                #loss_mean = torch.mean(torch.stack(loss))
+                #loss_mean = torch.reshape(loss_mean, (1, -1))
+            else:
+                file_name = data['file_name']
+                all_matches = data['all_matches'].permute(1,2,0) # shape=torch.Size([1, 87, 2])
+
+                # check if indexed correctly
+                loss = []
+                for i in range(len(all_matches[0])):
+                    x = all_matches[0][i][0]
+                    y = all_matches[0][i][1]
+                    loss.append(-torch.log( scores[0][x][y].exp() )) # check batch size == 1 ?
+                # for p0 in unmatched0:
+                #     loss += -torch.log(scores[0][p0][-1])
+                # for p1 in unmatched1:
+                #     loss += -torch.log(scores[0][-1][p1])
+                loss_mean = torch.mean(torch.stack(loss))
+                loss_mean = torch.reshape(loss_mean, (1, -1))
             return {
                 'matches0': indices0[0], # use -1 for invalid match
                 'matches1': indices1[0], # use -1 for invalid match

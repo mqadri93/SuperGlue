@@ -237,6 +237,25 @@ class VideoStreamer:
 
 # --- PREPROCESSING ---
 
+def drawkp(img1, img2, matchedpts, k):
+    print("Inside drawkp")
+    imgfinal = np.concatenate((img1, img2), axis=1)
+    i = 0
+    for m in matchedpts:
+        if(i>100):
+            break
+        c1 = m[0]
+        c2 = m[1]
+        x1 = c1[0]
+        y1 = c1[1]
+        x2 = c2[0] + img2.shape[1]
+        y2 = c2[1]
+        color = list(np.random.random(size=3) * 256) 
+        cv2.line(imgfinal, ((int(x1), int(y1))), ((int(x2),int(y2))), color, thickness=2, lineType=8)
+        i+=1
+    print(len(matchedpts))
+    plt.imsave('testkps/{}.jpg'.format(k), imgfinal )
+
 def process_resize(w, h, resize):
     assert(len(resize) > 0 and len(resize) <= 2)
     if len(resize) == 1 and resize[0] > -1:
